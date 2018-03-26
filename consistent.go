@@ -7,63 +7,68 @@ import (
 	"fmt"
 )
 
-var NoHosts = errors.New("no host added")
-
 type Consistent struct {
-	NumOfVNode      int
-	hashSortedSlice []uint32
-	circle          map[uint32]string
-	nodes           map[string]bool
+	numOfVirtualNode int
+	hashSortedNodes  []uint32
+	circle           map[uint32]string
+	nodes            map[string]bool
 }
 
 func New() *Consistent {
 	return &Consistent{
-		NumOfVNode: 20,
-		circle:     make(map[uint32]string),
-		nodes:      make(map[string]bool),
+		numOfVirtualNode: 20,
+		circle:           make(map[uint32]string),
+		nodes:            make(map[string]bool),
 	}
 }
 
+//get the nearby node
 func (c *Consistent) Get(key string) (string, error) {
 	if len(c.nodes) == 0 {
-		return "", NoHosts
+		return "", errors.New("no host added")
 	}
 	nearbyIndex := c.searchNearbyIndex(key)
-	nearHost := c.circle[c.hashSortedSlice[nearbyIndex]]
+	nearHost := c.circle[c.hashSortedNodes[nearbyIndex]]
 	return nearHost, nil
 }
 
-func (c *Consistent) Add(node string) {
+//add the node
+func (c *Consistent) Add(node string) error {
 	if _, ok := c.nodes[node]; ok {
-		return
+		return errors.New("host already existed")
 	}
 	c.nodes[node] = true
 	// add virtual node
-	for i := 0; i < c.NumOfVNode; i++ {
+	for i := 0; i < c.numOfVirtualNode; i++ {
 		virtualKey := getVirtualKey(i, node)
 		c.circle[virtualKey] = node
-		c.hashSortedSlice = append(c.hashSortedSlice, virtualKey)
+		c.hashSortedNodes = append(c.hashSortedNodes, virtualKey)
 	}
 
-	sort.Slice(c.hashSortedSlice, func(i, j int) bool {
-		return c.hashSortedSlice[i] < c.hashSortedSlice[j]
+	sort.Slice(c.hashSortedNodes, func(i, j int) bool {
+		return c.hashSortedNodes[i] < c.hashSortedNodes[j]
 	})
+	return nil
 }
 
-func (c *Consistent) Remove(node string) {
+//remove the node
+func (c *Consistent) Remove(node string) error {
 	if _, ok := c.nodes[node]; ok {
-		return
+		return errors.New("host is not existed")
 	}
 	delete(c.nodes, node)
 
-	for i := 0; i < c.NumOfVNode; i++ {
+	for i := 0; i < c.numOfVirtualNode; i++ {
 		virtualKey := getVirtualKey(i, node)
 		delete(c.circle, virtualKey)
 	}
 
 	c.refreshHashSlice()
+
+	return nil
 }
 
+//list the nodes already existed
 func (c *Consistent) ListNodes() []string {
 	var nodes []string
 	for node := range c.nodes {
@@ -78,23 +83,23 @@ func getVirtualKey(index int, node string) uint32 {
 
 func (c *Consistent) searchNearbyIndex(key string) int {
 	hashKey := hashKey(key)
-	targetIndex := sort.Search(len(c.hashSortedSlice), func(i int) bool {
-		return c.hashSortedSlice[i] >= hashKey
+	targetIndex := sort.Search(len(c.hashSortedNodes), func(i int) bool {
+		return c.hashSortedNodes[i] >= hashKey
 	})
 
-	if targetIndex >= len(c.hashSortedSlice) {
+	if targetIndex >= len(c.hashSortedNodes) {
 		targetIndex = 0
 	}
 	return targetIndex
 }
 
 func (c *Consistent) refreshHashSlice() {
-	c.hashSortedSlice = nil
+	c.hashSortedNodes = nil
 	for virtualKey := range c.circle {
-		c.hashSortedSlice = append(c.hashSortedSlice, virtualKey)
+		c.hashSortedNodes = append(c.hashSortedNodes, virtualKey)
 	}
-	sort.Slice(c.hashSortedSlice, func(i, j int) bool {
-		return c.hashSortedSlice[i] < c.hashSortedSlice[j]
+	sort.Slice(c.hashSortedNodes, func(i, j int) bool {
+		return c.hashSortedNodes[i] < c.hashSortedNodes[j]
 	})
 }
 
